@@ -1,8 +1,9 @@
+import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import AsyncGenerator, Dict, List, Optional, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -84,12 +85,26 @@ class TitleResponse(BaseModel):
     poster_url: Optional[str]
     overview: Optional[str]
     trailer_url: Optional[str]
-    genres: Optional[str]
+    genres: Optional[List[str]]
     position: int
     scraped_at: datetime
 
     class Config:
         from_attributes = True
+
+    @field_validator("genres", mode="before")
+    @classmethod
+    def deserialize_genres(cls, v: Any) -> Optional[List[str]]:
+        if v is None:
+            return None
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                return None
+        return None
 
 
 class TitleDetailResponse(TitleResponse):
