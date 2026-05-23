@@ -1,9 +1,9 @@
 import logging
 import time
 import json
-import requests
-from bs4 import BeautifulSoup
-from typing import Optional, Dict, List
+import requests  # type: ignore
+from bs4 import BeautifulSoup  # type: ignore
+from typing import Optional, Dict, List, Any
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -16,13 +16,13 @@ class FlixPatrolScraper:
     }
 
     @staticmethod
-    def scrape_movies() -> List[Dict]:
+    def scrape_movies() -> List[Dict[str, Any]]:
         """Scrape top 10 movies from FlixPatrol"""
         try:
             response = requests.get(FlixPatrolScraper.BASE_URL + "movies/", headers=FlixPatrolScraper.HEADERS, timeout=10)
             response.raise_for_status()
             soup = BeautifulSoup(response.content, "html.parser")
-            titles = []
+            titles: List[Dict[str, Any]] = []
 
             rows = soup.find_all("tr", class_="table-row-a")
             for position, row in enumerate(rows[:10], 1):
@@ -37,23 +37,23 @@ class FlixPatrolScraper:
                                 "type": "movie",
                                 "position": position
                             })
-                except Exception as e:
+                except (AttributeError, ValueError) as e:
                     logger.warning(f"Error parsing row: {e}")
 
             time.sleep(1)
             return titles
-        except Exception as e:
+        except (requests.RequestException, ValueError) as e:
             logger.error(f"Error scraping FlixPatrol movies: {e}")
             return []
 
     @staticmethod
-    def scrape_series() -> List[Dict]:
+    def scrape_series() -> List[Dict[str, Any]]:
         """Scrape top 10 series from FlixPatrol"""
         try:
             response = requests.get(FlixPatrolScraper.BASE_URL + "tv-shows/", headers=FlixPatrolScraper.HEADERS, timeout=10)
             response.raise_for_status()
             soup = BeautifulSoup(response.content, "html.parser")
-            titles = []
+            titles: List[Dict[str, Any]] = []
 
             rows = soup.find_all("tr", class_="table-row-a")
             for position, row in enumerate(rows[:10], 1):
@@ -68,12 +68,12 @@ class FlixPatrolScraper:
                                 "type": "series",
                                 "position": position
                             })
-                except Exception as e:
+                except (AttributeError, ValueError) as e:
                     logger.warning(f"Error parsing row: {e}")
 
             time.sleep(1)
             return titles
-        except Exception as e:
+        except (requests.RequestException, ValueError) as e:
             logger.error(f"Error scraping FlixPatrol series: {e}")
             return []
 
@@ -82,10 +82,10 @@ class TMDbAPI:
     BASE_URL = "https://api.themoviedb.org/3/"
     POSTER_URL = "https://image.tmdb.org/t/p/w500"
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str) -> None:
         self.api_key = api_key
 
-    def search(self, title: str, media_type: str = "movie") -> Optional[Dict]:
+    def search(self, title: str, media_type: str = "movie") -> Optional[Dict[str, Any]]:
         """Search for a title on TMDb"""
         if not self.api_key:
             logger.warning("TMDb API key not configured")
@@ -105,11 +105,11 @@ class TMDbAPI:
             if data.get("results"):
                 return data["results"][0]
             return None
-        except Exception as e:
+        except (requests.RequestException, ValueError) as e:
             logger.error(f"Error searching TMDb for '{title}': {e}")
             return None
 
-    def get_details(self, tmdb_id: int, media_type: str = "movie") -> Optional[Dict]:
+    def get_details(self, tmdb_id: int, media_type: str = "movie") -> Optional[Dict[str, Any]]:
         """Get detailed information about a title"""
         if not self.api_key:
             logger.warning("TMDb API key not configured")
@@ -124,13 +124,13 @@ class TMDbAPI:
             response = requests.get(url, params=params, timeout=10)
             response.raise_for_status()
             return response.json()
-        except Exception as e:
+        except (requests.RequestException, ValueError) as e:
             logger.error(f"Error getting TMDb details for ID {tmdb_id}: {e}")
             return None
 
-    def enrich_title(self, title: str, year: Optional[int], media_type: str) -> Dict:
+    def enrich_title(self, title: str, year: Optional[int], media_type: str) -> Dict[str, Any]:
         """Enrich a title with TMDb data"""
-        result = {
+        result: Dict[str, Any] = {
             "title": title,
             "year": year,
             "rating": None,
@@ -167,7 +167,7 @@ class TMDbAPI:
 class YouTubeAPI:
     BASE_URL = "https://www.googleapis.com/youtube/v3/search"
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str) -> None:
         self.api_key = api_key
 
     def search_trailer(self, title: str, year: Optional[int]) -> Optional[str]:
@@ -193,6 +193,6 @@ class YouTubeAPI:
                 video_id = data["items"][0]["id"]["videoId"]
                 return f"https://www.youtube.com/embed/{video_id}"
             return None
-        except Exception as e:
+        except (requests.RequestException, ValueError, KeyError) as e:
             logger.error(f"Error searching YouTube for '{title}': {e}")
             return None

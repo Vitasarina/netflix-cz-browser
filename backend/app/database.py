@@ -1,5 +1,8 @@
 import os
+from typing import Generator
+import requests
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 from .models import Base, Title, get_engine, get_session_local
 from .config import settings
 from .scrapers import FlixPatrolScraper, TMDbAPI, YouTubeAPI
@@ -12,13 +15,13 @@ engine = get_engine(settings.DATABASE_URL)
 SessionLocal = get_session_local(engine)
 
 
-def init_db():
+def init_db() -> None:
     """Initialize database"""
     os.makedirs("data", exist_ok=True)
     Base.metadata.create_all(bind=engine)
 
 
-def get_db():
+def get_db() -> Generator[Session, None, None]:
     """Get database session"""
     db = SessionLocal()
     try:
@@ -27,7 +30,7 @@ def get_db():
         db.close()
 
 
-def sync_trending_data():
+def sync_trending_data() -> bool:
     """Fetch and sync trending data from FlixPatrol and external APIs"""
     if not settings.api_keys_available:
         logger.warning("API keys not configured. Skipping sync. Please set TMDB_API_KEY and YOUTUBE_API_KEY in .env")
@@ -95,7 +98,7 @@ def sync_trending_data():
         logger.info(f"Successfully synced {len(all_titles)} titles")
         return True
 
-    except Exception as e:
+    except (requests.RequestException, SQLAlchemyError, ValueError) as e:
         logger.error(f"Error during sync: {e}")
         db.rollback()
         return False

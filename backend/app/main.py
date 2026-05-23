@@ -1,11 +1,12 @@
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import List, Optional
+from typing import AsyncGenerator, Dict, List, Optional, Any
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
+from apscheduler.schedulers.background import BackgroundScheduler  # type: ignore
+from apscheduler.triggers.cron import CronTrigger  # type: ignore
 
 from .config import settings
 from .database import get_db, init_db, sync_trending_data, SessionLocal
@@ -14,7 +15,42 @@ from .models import Title
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Netflix CZ Trending Browser")
+scheduler = BackgroundScheduler()
+
+
+def schedule_sync() -> None:
+    """Schedule daily sync"""
+    trigger = CronTrigger(hour=settings.SYNC_HOUR, minute=settings.SYNC_MINUTE)
+    scheduler.add_job(sync_trending_data, trigger, id="sync_trending")
+    scheduler.start()
+    logger.info(f"Scheduler started: daily sync at {settings.SYNC_HOUR}:{settings.SYNC_MINUTE:02d}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Lifespan context manager for startup and shutdown"""
+    init_db()
+    schedule_sync()
+
+    # Check if database is empty
+    db = SessionLocal()
+    try:
+        count = db.query(Title).count()
+        if count == 0:
+            logger.info("Database is empty, performing initial sync...")
+            if sync_trending_data():
+                logger.info("Initial sync completed successfully")
+            else:
+                logger.warning("Initial sync failed. API keys may be missing.")
+    finally:
+        db.close()
+
+    yield
+
+    scheduler.shutdown()
+
+
+app = FastAPI(title="Netflix CZ Trending Browser", lifespan=lifespan)
 
 # CORS middleware
 origins = settings.CORS_ORIGINS
@@ -34,35 +70,6 @@ else:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-
-def schedule_sync():
-    """Schedule daily sync"""
-    scheduler = BackgroundScheduler()
-    trigger = CronTrigger(hour=settings.SYNC_HOUR, minute=settings.SYNC_MINUTE)
-    scheduler.add_job(sync_trending_data, trigger, id="sync_trending")
-    scheduler.start()
-    logger.info(f"Scheduler started: daily sync at {settings.SYNC_HOUR}:{settings.SYNC_MINUTE:02d}")
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database and sync on startup"""
-    init_db()
-    schedule_sync()
-
-    # Check if database is empty
-    db = SessionLocal()
-    try:
-        count = db.query(Title).count()
-        if count == 0:
-            logger.info("Database is empty, performing initial sync...")
-            if sync_trending_data():
-                logger.info("Initial sync completed successfully")
-            else:
-                logger.warning("Initial sync failed. API keys may be missing.")
-    finally:
-        db.close()
 
 
 # Pydantic models for responses
@@ -93,7 +100,7 @@ class TitleDetailResponse(TitleResponse):
 
 
 @app.get("/api/trending", response_model=List[TitleResponse])
-async def get_trending(type: Optional[str] = None, db: Session = Depends(get_db)):
+async def get_trending(type: Optional[str] = None, db: Session = Depends(get_db)) -> List[Any]:
     """Get list of trending titles"""
     query = db.query(Title)
 
@@ -107,7 +114,7 @@ async def get_trending(type: Optional[str] = None, db: Session = Depends(get_db)
 
 
 @app.get("/api/trending/{title_id}", response_model=TitleDetailResponse)
-async def get_trending_detail(title_id: int, db: Session = Depends(get_db)):
+async def get_trending_detail(title_id: int, db: Session = Depends(get_db)) -> Any:
     """Get detail of a specific title"""
     title = db.query(Title).filter(Title.id == title_id).first()
 
@@ -118,7 +125,7 @@ async def get_trending_detail(title_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/sync")
-async def manual_sync():
+async def manual_sync() -> Dict[str, Any]:
     """Manually trigger sync"""
     if not settings.api_keys_available:
         logger.error("API keys not configured")
@@ -134,13 +141,13 @@ async def manual_sync():
         return {"status": "error", "message": "Sync failed"}
 
 
-async def sync_trending_data_async():
+async def sync_trending_data_async() -> bool:
     """Async wrapper for sync_trending_data"""
     return sync_trending_data()
 
 
 @app.get("/api/health")
-async def health_check():
+async def health_check() -> Dict[str, Any]:
     """Health check endpoint"""
     return {
         "status": "healthy",
