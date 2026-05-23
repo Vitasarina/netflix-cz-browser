@@ -1,7 +1,4 @@
-import pytest
-import os
 from unittest.mock import patch, MagicMock, PropertyMock
-from sqlalchemy import inspect
 
 from app.database import init_db, get_db, sync_trending_data
 from app import config

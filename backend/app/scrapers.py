@@ -1,10 +1,9 @@
 import logging
 import time
 import json
-import requests  # type: ignore
+import requests
 from bs4 import BeautifulSoup  # type: ignore
-from typing import Optional, Dict, List, Any
-from datetime import datetime
+from typing import Optional, Dict, List, Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +102,7 @@ class TMDbAPI:
 
             data = response.json()
             if data.get("results"):
-                return data["results"][0]
+                return cast(Dict[str, Any], data["results"][0])
             return None
         except (requests.RequestException, ValueError) as e:
             logger.error(f"Error searching TMDb for '{title}': {e}")
@@ -123,7 +122,7 @@ class TMDbAPI:
             }
             response = requests.get(url, params=params, timeout=10)
             response.raise_for_status()
-            return response.json()
+            return cast(Dict[str, Any], response.json())
         except (requests.RequestException, ValueError) as e:
             logger.error(f"Error getting TMDb details for ID {tmdb_id}: {e}")
             return None
@@ -178,7 +177,7 @@ class YouTubeAPI:
 
         try:
             query = f"{title} {year} official trailer" if year else f"{title} official trailer"
-            params = {
+            params: Dict[str, str | int] = {
                 "part": "snippet",
                 "q": query,
                 "type": "video",

@@ -13,7 +13,7 @@ class Settings:
     CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
 
     @property
-    def api_keys_available(self):
+    def api_keys_available(self) -> bool:
         return bool(self.TMDB_API_KEY and self.YOUTUBE_API_KEY)
 
 

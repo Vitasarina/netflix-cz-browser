@@ -1,9 +1,9 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, Text, DateTime, create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import Column, Integer, String, Float, Text, DateTime, create_engine, Engine
+from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
 
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
 
 
 class Title(Base):
@@ -24,12 +24,12 @@ class Title(Base):
     scraped_at = Column(DateTime, default=datetime.utcnow)
 
 
-def get_engine(database_url: str):
+def get_engine(database_url: str) -> Engine:
     return create_engine(
         database_url,
         connect_args={"check_same_thread": False} if "sqlite" in database_url else {}
     )
 
 
-def get_session_local(engine):
+def get_session_local(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(autocommit=False, autoflush=False, bind=engine)

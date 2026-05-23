@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import AsyncGenerator, Dict, List, Optional, Any
+from pydantic import BaseModel
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -70,10 +71,6 @@ else:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-
-# Pydantic models for responses
-from pydantic import BaseModel
 
 
 class TitleResponse(BaseModel):
