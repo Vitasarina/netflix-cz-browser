@@ -1,0 +1,58 @@
+services:
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../docker/Dockerfile.backend
+    image: netflix-cz-backend:latest
+    expose:
+      - "8000"
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///./data/netflix.db}
+    volumes:
+      - ../data:/app/data
+    networks:
+      - internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  scheduler:
+    build:
+      context: ../backend
+      dockerfile: ../docker/Dockerfile.backend
+    image: netflix-cz-backend:latest
+    command: python scheduler.py
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///./data/netflix.db}
+    volumes:
+      - ../data:/app/data
+    networks:
+      - internal
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    ports:
+      - "3000:80"
+    networks:
+      - internal
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+networks:
+  internal:
+    driver: bridge
