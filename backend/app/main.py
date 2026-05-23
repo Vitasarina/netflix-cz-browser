@@ -2,7 +2,7 @@ import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import AsyncGenerator, Dict, List, Optional, Any
+from typing import AsyncGenerator, Dict, List, Optional, Any, cast
 from pydantic import BaseModel, field_validator
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -98,10 +98,10 @@ class TitleResponse(BaseModel):
         if v is None:
             return None
         if isinstance(v, list):
-            return v
+            return cast(List[str], v)
         if isinstance(v, str):
             try:
-                return json.loads(v)
+                return cast(List[str], json.loads(v))
             except (json.JSONDecodeError, ValueError):
                 return None
         return None
