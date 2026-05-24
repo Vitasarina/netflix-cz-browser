@@ -1,95 +1,120 @@
 from unittest.mock import patch, MagicMock
 import requests
 
-from app.scrapers import FlixPatrolScraper, TMDbAPI, YouTubeAPI
-
-
-class TestFlixPatrolScraper:
-    @patch("app.scrapers.requests.get")
-    def test_scrape_movies_success(self, mock_get):
-        mock_response = MagicMock()
-        mock_response.content = b"""
-        <html>
-            <tr class="table-row-a">
-                <td></td>
-                <td><a class="chart-title">Movie 1</a></td>
-            </tr>
-            <tr class="table-row-a">
-                <td></td>
-                <td><a class="chart-title">Movie 2</a></td>
-            </tr>
-        </html>
-        """
-        mock_get.return_value = mock_response
-
-        result = FlixPatrolScraper.scrape_movies()
-
-        assert len(result) == 2
-        assert result[0]["title"] == "Movie 1"
-        assert result[0]["type"] == "movie"
-        assert result[0]["position"] == 1
-        assert result[1]["position"] == 2
-
-    @patch("app.scrapers.requests.get")
-    def test_scrape_movies_empty_page(self, mock_get):
-        mock_response = MagicMock()
-        mock_response.content = b"<html></html>"
-        mock_get.return_value = mock_response
-
-        result = FlixPatrolScraper.scrape_movies()
-        assert result == []
-
-    @patch("app.scrapers.requests.get")
-    def test_scrape_movies_malformed_html(self, mock_get):
-        mock_response = MagicMock()
-        mock_response.content = b"""
-        <html>
-            <tr class="table-row-a">
-                <td></td>
-            </tr>
-        </html>
-        """
-        mock_get.return_value = mock_response
-
-        result = FlixPatrolScraper.scrape_movies()
-        assert result == []
-
-    @patch("app.scrapers.requests.get")
-    def test_scrape_movies_request_error(self, mock_get):
-        mock_get.side_effect = requests.RequestException("Connection failed")
-        result = FlixPatrolScraper.scrape_movies()
-        assert result == []
-
-    @patch("app.scrapers.requests.get")
-    def test_scrape_series_success(self, mock_get):
-        mock_response = MagicMock()
-        mock_response.content = b"""
-        <html>
-            <tr class="table-row-a">
-                <td></td>
-                <td><a class="chart-title">Series 1</a></td>
-            </tr>
-        </html>
-        """
-        mock_get.return_value = mock_response
-
-        result = FlixPatrolScraper.scrape_series()
-
-        assert len(result) == 1
-        assert result[0]["title"] == "Series 1"
-        assert result[0]["type"] == "series"
-
-    @patch("app.scrapers.requests.get")
-    def test_scrape_series_request_error(self, mock_get):
-        mock_get.side_effect = requests.RequestException("API error")
-        result = FlixPatrolScraper.scrape_series()
-        assert result == []
+from app.scrapers import TMDbAPI, YouTubeAPI
 
 
 class TestTMDbAPI:
     def test_init(self):
         api = TMDbAPI("test_key")
         assert api.api_key == "test_key"
+
+    @patch("app.scrapers.requests.get")
+    def test_get_trending_movies_success(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {
+                    "id": 123,
+                    "title": "Movie 1",
+                    "poster_path": "/path1.jpg",
+                    "vote_average": 8.5,
+                    "overview": "Overview 1",
+                    "release_date": "2023-01-01"
+                },
+                {
+                    "id": 124,
+                    "title": "Movie 2",
+                    "poster_path": "/path2.jpg",
+                    "vote_average": 7.5,
+                    "overview": "Overview 2",
+                    "release_date": "2023-02-01"
+                }
+            ]
+        }
+        mock_get.return_value = mock_response
+
+        api = TMDbAPI("test_key")
+        result = api.get_trending("movie")
+
+        assert len(result) == 2
+        assert result[0]["title"] == "Movie 1"
+        assert result[0]["position"] == 1
+        assert result[0]["rating"] == 8.5
+        assert result[0]["year"] == 2023
+        assert result[0]["poster_url"] == "https://image.tmdb.org/t/p/w500/path1.jpg"
+        assert result[1]["position"] == 2
+
+    @patch("app.scrapers.requests.get")
+    def test_get_trending_series_success(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {
+                    "id": 456,
+                    "name": "Series 1",
+                    "poster_path": "/series1.jpg",
+                    "vote_average": 8.0,
+                    "overview": "Series overview",
+                    "first_air_date": "2023-01-15"
+                }
+            ]
+        }
+        mock_get.return_value = mock_response
+
+        api = TMDbAPI("test_key")
+        result = api.get_trending("tv")
+
+        assert len(result) == 1
+        assert result[0]["title"] == "Series 1"
+        assert result[0]["position"] == 1
+        assert result[0]["rating"] == 8.0
+        assert result[0]["year"] == 2023
+
+    def test_get_trending_no_api_key(self):
+        api = TMDbAPI("")
+        result = api.get_trending("movie")
+        assert result == []
+
+    @patch("app.scrapers.requests.get")
+    def test_get_trending_empty_results(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"results": []}
+        mock_get.return_value = mock_response
+
+        api = TMDbAPI("test_key")
+        result = api.get_trending("movie")
+        assert result == []
+
+    @patch("app.scrapers.requests.get")
+    def test_get_trending_request_error(self, mock_get):
+        mock_get.side_effect = requests.RequestException("API error")
+
+        api = TMDbAPI("test_key")
+        result = api.get_trending("movie")
+        assert result == []
+
+    @patch("app.scrapers.requests.get")
+    def test_get_trending_without_optional_fields(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {
+                    "id": 789,
+                    "title": "Movie Without Details",
+                }
+            ]
+        }
+        mock_get.return_value = mock_response
+
+        api = TMDbAPI("test_key")
+        result = api.get_trending("movie")
+
+        assert len(result) == 1
+        assert result[0]["title"] == "Movie Without Details"
+        assert result[0]["rating"] is None
+        assert "year" not in result[0]
+        assert "poster_url" not in result[0]
 
     @patch("app.scrapers.requests.get")
     def test_search_success(self, mock_get):
