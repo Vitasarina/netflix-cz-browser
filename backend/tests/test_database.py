@@ -61,10 +61,8 @@ class TestSyncTrendingData:
     @patch("app.database.SessionLocal")
     @patch("app.database.YouTubeAPI")
     @patch("app.database.TMDbAPI")
-    @patch("app.database.FlixPatrolScraper.scrape_series", return_value=[])
-    @patch("app.database.FlixPatrolScraper.scrape_movies", return_value=[])
     def test_sync_success_with_empty_results(
-        self, mock_movies, mock_series, mock_tmdb, mock_yt, mock_session_local
+        self, mock_tmdb, mock_yt, mock_session_local
     ):
         with patch.object(
             type(config.settings),
@@ -74,6 +72,13 @@ class TestSyncTrendingData:
         ):
             mock_db = MagicMock()
             mock_session_local.return_value = mock_db
+
+            mock_tmdb_inst = MagicMock()
+            mock_tmdb_inst.get_trending.return_value = []
+            mock_tmdb.return_value = mock_tmdb_inst
+
+            mock_yt_inst = MagicMock()
+            mock_yt.return_value = mock_yt_inst
 
             result = sync_trending_data()
             assert result is True
@@ -83,10 +88,8 @@ class TestSyncTrendingData:
     @patch("app.database.SessionLocal")
     @patch("app.database.YouTubeAPI")
     @patch("app.database.TMDbAPI")
-    @patch("app.database.FlixPatrolScraper.scrape_series", return_value=[])
-    @patch("app.database.FlixPatrolScraper.scrape_movies")
     def test_sync_with_movies(
-        self, mock_movies, mock_series, mock_tmdb, mock_yt, mock_session_local
+        self, mock_tmdb, mock_yt, mock_session_local
     ):
         with patch.object(
             type(config.settings),
@@ -96,13 +99,12 @@ class TestSyncTrendingData:
         ):
             mock_db = MagicMock()
             mock_session_local.return_value = mock_db
-            mock_movies.return_value = [{"title": "Test", "position": 1}]
 
             mock_tmdb_inst = MagicMock()
-            mock_tmdb_inst.enrich_title.return_value = {
-                "title": "Test", "tmdb_id": 1, "year": 2023, "rating": 8.5,
-                "overview": "Test", "poster_url": None, "genres": None, "position": 1
-            }
+            mock_tmdb_inst.get_trending.side_effect = [
+                [{"title": "Test", "position": 1, "tmdb_id": 1, "year": 2023, "rating": 8.5, "overview": "Test"}],
+                []
+            ]
             mock_tmdb.return_value = mock_tmdb_inst
 
             mock_yt_inst = MagicMock()
@@ -117,10 +119,8 @@ class TestSyncTrendingData:
     @patch("app.database.SessionLocal")
     @patch("app.database.YouTubeAPI")
     @patch("app.database.TMDbAPI")
-    @patch("app.database.FlixPatrolScraper.scrape_series")
-    @patch("app.database.FlixPatrolScraper.scrape_movies")
     def test_sync_handles_request_exception(
-        self, mock_movies, mock_series, mock_tmdb, mock_yt, mock_session_local
+        self, mock_tmdb, mock_yt, mock_session_local
     ):
         import requests
 
@@ -132,7 +132,10 @@ class TestSyncTrendingData:
         ):
             mock_db = MagicMock()
             mock_session_local.return_value = mock_db
-            mock_movies.side_effect = requests.RequestException("Network error")
+
+            mock_tmdb_inst = MagicMock()
+            mock_tmdb_inst.get_trending.side_effect = requests.RequestException("Network error")
+            mock_tmdb.return_value = mock_tmdb_inst
 
             result = sync_trending_data()
             assert result is False
@@ -142,10 +145,8 @@ class TestSyncTrendingData:
     @patch("app.database.SessionLocal")
     @patch("app.database.YouTubeAPI")
     @patch("app.database.TMDbAPI")
-    @patch("app.database.FlixPatrolScraper.scrape_series")
-    @patch("app.database.FlixPatrolScraper.scrape_movies")
     def test_sync_handles_value_error(
-        self, mock_movies, mock_series, mock_tmdb, mock_yt, mock_session_local
+        self, mock_tmdb, mock_yt, mock_session_local
     ):
         with patch.object(
             type(config.settings),
@@ -155,7 +156,10 @@ class TestSyncTrendingData:
         ):
             mock_db = MagicMock()
             mock_session_local.return_value = mock_db
-            mock_movies.side_effect = ValueError("Invalid data")
+
+            mock_tmdb_inst = MagicMock()
+            mock_tmdb_inst.get_trending.side_effect = ValueError("Invalid data")
+            mock_tmdb.return_value = mock_tmdb_inst
 
             result = sync_trending_data()
             assert result is False
@@ -164,10 +168,8 @@ class TestSyncTrendingData:
     @patch("app.database.SessionLocal")
     @patch("app.database.YouTubeAPI")
     @patch("app.database.TMDbAPI")
-    @patch("app.database.FlixPatrolScraper.scrape_series")
-    @patch("app.database.FlixPatrolScraper.scrape_movies")
     def test_sync_handles_sqlalchemy_error(
-        self, mock_movies, mock_series, mock_tmdb, mock_yt, mock_session_local
+        self, mock_tmdb, mock_yt, mock_session_local
     ):
         from sqlalchemy.exc import SQLAlchemyError
 
@@ -180,13 +182,12 @@ class TestSyncTrendingData:
             mock_db = MagicMock()
             mock_db.commit.side_effect = SQLAlchemyError("DB error")
             mock_session_local.return_value = mock_db
-            mock_movies.return_value = [{"title": "Test", "position": 1}]
 
             mock_tmdb_inst = MagicMock()
-            mock_tmdb_inst.enrich_title.return_value = {
-                "title": "Test", "tmdb_id": 1, "year": 2023, "rating": 8.5,
-                "overview": "Test", "poster_url": None, "genres": None, "position": 1
-            }
+            mock_tmdb_inst.get_trending.side_effect = [
+                [{"title": "Test", "position": 1, "tmdb_id": 1, "year": 2023, "rating": 8.5, "overview": "Test"}],
+                []
+            ]
             mock_tmdb.return_value = mock_tmdb_inst
 
             mock_yt_inst = MagicMock()
@@ -200,10 +201,8 @@ class TestSyncTrendingData:
     @patch("app.database.SessionLocal")
     @patch("app.database.YouTubeAPI")
     @patch("app.database.TMDbAPI")
-    @patch("app.database.FlixPatrolScraper.scrape_series")
-    @patch("app.database.FlixPatrolScraper.scrape_movies")
     def test_sync_with_series(
-        self, mock_movies, mock_series, mock_tmdb, mock_yt, mock_session_local
+        self, mock_tmdb, mock_yt, mock_session_local
     ):
         with patch.object(
             type(config.settings),
@@ -213,14 +212,12 @@ class TestSyncTrendingData:
         ):
             mock_db = MagicMock()
             mock_session_local.return_value = mock_db
-            mock_movies.return_value = []
-            mock_series.return_value = [{"title": "Test Series", "position": 1}]
 
             mock_tmdb_inst = MagicMock()
-            mock_tmdb_inst.enrich_title.return_value = {
-                "title": "Test Series", "tmdb_id": 2, "year": 2023, "rating": 8.0,
-                "overview": "Test", "poster_url": "http://url", "genres": "[]", "position": 1
-            }
+            mock_tmdb_inst.get_trending.side_effect = [
+                [],
+                [{"title": "Test Series", "position": 1, "tmdb_id": 2, "year": 2023, "rating": 8.0, "overview": "Test", "poster_url": "http://url"}]
+            ]
             mock_tmdb.return_value = mock_tmdb_inst
 
             mock_yt_inst = MagicMock()

@@ -1,80 +1,9 @@
 import logging
-import time
 import json
 import requests
-from bs4 import BeautifulSoup  # type: ignore
 from typing import Optional, Dict, List, Any, cast
 
 logger = logging.getLogger(__name__)
-
-
-class FlixPatrolScraper:
-    BASE_URL = "https://flixpatrol.com/top10/netflix/czech-republic/"
-    HEADERS = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
-
-    @staticmethod
-    def scrape_movies() -> List[Dict[str, Any]]:
-        """Scrape top 10 movies from FlixPatrol"""
-        try:
-            response = requests.get(FlixPatrolScraper.BASE_URL + "movies/", headers=FlixPatrolScraper.HEADERS, timeout=10)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.content, "html.parser")
-            titles: List[Dict[str, Any]] = []
-
-            rows = soup.find_all("tr", class_="table-row-a")
-            for position, row in enumerate(rows[:10], 1):
-                try:
-                    cells = row.find_all("td")
-                    if len(cells) >= 2:
-                        title_link = row.find("a", class_="chart-title")
-                        if title_link:
-                            title = title_link.get_text(strip=True)
-                            titles.append({
-                                "title": title,
-                                "type": "movie",
-                                "position": position
-                            })
-                except (AttributeError, ValueError) as e:
-                    logger.warning(f"Error parsing row: {e}")
-
-            time.sleep(1)
-            return titles
-        except (requests.RequestException, ValueError) as e:
-            logger.error(f"Error scraping FlixPatrol movies: {e}")
-            return []
-
-    @staticmethod
-    def scrape_series() -> List[Dict[str, Any]]:
-        """Scrape top 10 series from FlixPatrol"""
-        try:
-            response = requests.get(FlixPatrolScraper.BASE_URL + "tv-shows/", headers=FlixPatrolScraper.HEADERS, timeout=10)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.content, "html.parser")
-            titles: List[Dict[str, Any]] = []
-
-            rows = soup.find_all("tr", class_="table-row-a")
-            for position, row in enumerate(rows[:10], 1):
-                try:
-                    cells = row.find_all("td")
-                    if len(cells) >= 2:
-                        title_link = row.find("a", class_="chart-title")
-                        if title_link:
-                            title = title_link.get_text(strip=True)
-                            titles.append({
-                                "title": title,
-                                "type": "series",
-                                "position": position
-                            })
-                except (AttributeError, ValueError) as e:
-                    logger.warning(f"Error parsing row: {e}")
-
-            time.sleep(1)
-            return titles
-        except (requests.RequestException, ValueError) as e:
-            logger.error(f"Error scraping FlixPatrol series: {e}")
-            return []
 
 
 class TMDbAPI:
@@ -126,6 +55,56 @@ class TMDbAPI:
         except (requests.RequestException, ValueError) as e:
             logger.error(f"Error getting TMDb details for ID {tmdb_id}: {e}")
             return None
+
+    def get_trending(self, media_type: str) -> List[Dict[str, Any]]:
+        """Get trending titles from TMDB Discover API filtered by Netflix CZ watch provider"""
+        if not self.api_key:
+            logger.warning("TMDb API key not configured")
+            return []
+
+        try:
+            url = f"{self.BASE_URL}discover/{media_type}"
+            params = {
+                "api_key": self.api_key,
+                "with_watch_providers": "8",
+                "watch_region": "CZ",
+                "sort_by": "popularity.desc",
+                "language": "en-US",
+                "page": "1"
+            }
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+
+            data = response.json()
+            results = data.get("results", [])
+            titles: List[Dict[str, Any]] = []
+
+            for position, result in enumerate(results[:10], 1):
+                title_key = "title" if media_type == "movie" else "name"
+                date_key = "release_date" if media_type == "movie" else "first_air_date"
+
+                title_data: Dict[str, Any] = {
+                    "title": result.get(title_key, ""),
+                    "tmdb_id": result.get("id"),
+                    "rating": result.get("vote_average"),
+                    "overview": result.get("overview"),
+                    "position": position,
+                }
+
+                poster_path = result.get("poster_path")
+                if poster_path:
+                    title_data["poster_url"] = f"{self.POSTER_URL}{poster_path}"
+
+                date_str = result.get(date_key)
+                if date_str:
+                    title_data["year"] = int(date_str[:4])
+
+                titles.append(title_data)
+
+            return titles
+        except (requests.RequestException, ValueError, KeyError) as e:
+            logger.error(f"Error fetching trending from TMDB Discover API: {e}")
+            return []
 
     def enrich_title(self, title: str, year: Optional[int], media_type: str) -> Dict[str, Any]:
         """Enrich a title with TMDb data"""

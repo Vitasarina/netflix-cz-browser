@@ -1,13 +1,13 @@
 import os
+import time
 from typing import Generator
 import requests
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from .models import Base, Title, get_engine, get_session_local
 from .config import settings
-from .scrapers import FlixPatrolScraper, TMDbAPI, YouTubeAPI
+from .scrapers import TMDbAPI, YouTubeAPI
 import logging
-import time
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def sync_trending_data() -> bool:
-    """Fetch and sync trending data from FlixPatrol and external APIs"""
+    """Fetch and sync trending data from TMDB Discover API and external APIs"""
     if not settings.api_keys_available:
         logger.warning("API keys not configured. Skipping sync. Please set TMDB_API_KEY and YOUTUBE_API_KEY in .env")
         return False
@@ -49,32 +49,28 @@ def sync_trending_data() -> bool:
 
         all_titles = []
 
-        # Scrape movies
-        logger.info("Scraping movies from FlixPatrol...")
-        movies = FlixPatrolScraper.scrape_movies()
+        # Get trending movies from TMDB Discover API
+        logger.info("Fetching trending movies from TMDB Discover API...")
+        movies = tmdb.get_trending("movie")
         for movie in movies:
-            logger.info(f"Enriching movie: {movie['title']}")
-            enriched = tmdb.enrich_title(movie["title"], None, "movie")
-            trailer = youtube.search_trailer(movie["title"], enriched.get("year"))
+            logger.info(f"Processing movie: {movie['title']}")
+            trailer = youtube.search_trailer(movie["title"], movie.get("year"))
             if trailer:
-                enriched["trailer_url"] = trailer
-            enriched["position"] = movie["position"]
-            enriched["type"] = "movie"
-            all_titles.append(enriched)
+                movie["trailer_url"] = trailer
+            movie["type"] = "movie"
+            all_titles.append(movie)
             time.sleep(0.5)
 
-        # Scrape series
-        logger.info("Scraping series from FlixPatrol...")
-        series = FlixPatrolScraper.scrape_series()
+        # Get trending series from TMDB Discover API
+        logger.info("Fetching trending series from TMDB Discover API...")
+        series = tmdb.get_trending("tv")
         for serie in series:
-            logger.info(f"Enriching series: {serie['title']}")
-            enriched = tmdb.enrich_title(serie["title"], None, "tv")
-            trailer = youtube.search_trailer(serie["title"], enriched.get("year"))
+            logger.info(f"Processing series: {serie['title']}")
+            trailer = youtube.search_trailer(serie["title"], serie.get("year"))
             if trailer:
-                enriched["trailer_url"] = trailer
-            enriched["position"] = serie["position"]
-            enriched["type"] = "series"
-            all_titles.append(enriched)
+                serie["trailer_url"] = trailer
+            serie["type"] = "series"
+            all_titles.append(serie)
             time.sleep(0.5)
 
         # Save to database
