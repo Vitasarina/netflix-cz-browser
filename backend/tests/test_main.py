@@ -3,7 +3,7 @@ from datetime import datetime
 from unittest.mock import patch, MagicMock, PropertyMock
 from fastapi.testclient import TestClient
 
-from app.main import app, TitleResponse
+from app.main import app
 from app.models import Title
 from app.database import get_db
 from app import config
